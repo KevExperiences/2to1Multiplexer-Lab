@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2-to-1 Multiplexer Logic Sandbox</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter & JetBrains Mono Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Sandbox Dot Grid */
+        .sandbox-grid {
+            background-color: #f8fafc;
+            background-image: radial-gradient(#cbd5e1 1.25px, transparent 1.25px);
+            background-size: 20px 20px;
+        }
+        .dark .sandbox-grid {
+            background-color: #020617;
+            background-image: radial-gradient(#1e293b 1.25px, transparent 1.25px);
+            background-size: 20px 20px;
+        }
+
+        /* Wire animations & hover states */
+        .wire-path {
+            transition: stroke 0.2s ease, stroke-width 0.15s ease;
+            cursor: pointer;
+        }
+        .wire-path:hover {
+            stroke: #ef4444 !important;
+            stroke-width: 4.5px !important;
+        }
+
+        /* Pin port hover pulse */
+        .port-dot {
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .port-dot:hover {
+            transform: scale(1.35);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.35);
+        }
+
+        /* Active click-to-connect selected port highlight */
+        .port-selected {
+            transform: scale(1.45) !important;
+            box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.55) !important;
+            outline: 2px solid #ffffff;
+        }
+        .dark .port-selected {
+            outline: 2px solid #0f172a;
+        }
+
+        /* Prevent text selection during node dragging */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 h-screen flex flex-col overflow-hidden transition-colors duration-200">
+
+    <!-- TOP BAR: Title, Live Boolean Expression Banner & Controls -->
+    <header class="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-30 shrink-0">
+        <div class="px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand -->
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-500/30 shrink-0">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 3v18l12-4.5v-9L6 3z"/>
+                        <path d="M2 8h4"/><path d="M2 16h4"/><path d="M18 12h4"/><path d="M12 18.75V22"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-sm sm:text-base tracking-tight leading-none">2:1 MUX Sandbox</h1>
+                    <span class="text-[11px] text-slate-500 dark:text-slate-400">Drag MUX • Wire Pins • Type Variables</span>
+                </div>
+            </div>
+
+            <!-- CENTER: Prominent Live Boolean Expression Display -->
+            <div class="flex-1 min-w-[260px] max-w-3xl mx-auto">
+                <div class="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/50 border border-indigo-200/80 dark:border-indigo-800/70 shadow-inner">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-600 text-white shrink-0">
+                            Boolean Expr
+                        </span>
+                        <div id="topBooleanExpr" class="font-mono text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate" title="Click Copy to copy full expression">
+                            Y = S'·I0 + S·I1
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span id="simplificationBadge" class="hidden sm:inline-block text-[11px] font-medium px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-700/50">
+                            Simplified
+                        </span>
+                        <button id="copyExprBtn" title="Copy Expression" class="p-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Presets, Truth Table Toggle & Clear/Theme -->
+            <div class="flex items-center gap-2">
+                <select id="presetSelect" class="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                    <option value="single">Preset: Single 2:1 MUX</option>
+                    <option value="mux4to1">Preset: 4:1 MUX Tree (3 MUXes)</option>
+                    <option value="xor">Preset: XOR Gate (2:1 MUX)</option>
+                    <option value="fullAdderCarry">Preset: Majority / Carry Logic</option>
+                    <option value="custom" disabled hidden>Custom Circuit</option>
+                </select>
+
+                <button id="toggleTruthTableBtn" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Truth Table</span>
+                </button>
+
+                <button id="clearCanvasBtn" title="Clear All Multiplexers" class="px-2.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200/70 dark:border-rose-800/50 text-xs font-semibold transition-colors">
+                    Clear
+                </button>
+
+                <button id="themeToggle" title="Toggle Dark Mode" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors" aria-label="Toggle Theme">
+                    <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                    <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN SANDBOX WORKSPACE -->
+    <div id="sandboxWrapper" class="relative flex-1 w-full h-full overflow-hidden sandbox-grid">
+
+        <!-- TOP-LEFT FLOATING PALETTE: Draggable 2:1 Multiplexer Icon -->
+        <aside class="absolute top-4 left-4 z-20 flex flex-col gap-2.5 max-w-[215px]">
+            <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg p-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                    <span>Components</span>
+                    <span class="text-[10px] font-normal text-indigo-500">Drag or Click</span>
+                </div>
+
+                <!-- Draggable MUX Palette Item -->
+                <div id="paletteMuxItem" draggable="true"
+                     class="group cursor-grab active:cursor-grabbing flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all">
+                    <!-- Custom 2:1 MUX Trapezoid SVG Icon -->
+                    <div class="w-11 h-11 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <svg class="w-8 h-8 text-indigo-600 dark:text-indigo-400" viewBox="0 0 40 40" fill="none">
+                            <polygon points="11,5 29,11 29,29 11,35" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" fill="rgba(99, 102, 241, 0.08)"/>
+                            <line x1="4" y1="13" x2="11" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="4" y1="27" x2="11" y2="27" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="29" y1="20" x2="36" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="20" y1="32" x2="20" y2="38" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                            <text x="14" y="15" font-size="6" font-weight="bold" fill="currentColor" font-family="monospace">0</text>
+                            <text x="14" y="29" font-size="6" font-weight="bold" fill="currentColor" font-family="monospace">1</text>
+                        </svg>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">2:1 Multiplexer</div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Drag onto canvas to add</div>
+                    </div>
+                </div>
+
+                <!-- Quick Instructions Legend -->
+                <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div class="flex items-start gap-1.5">
+                        <span class="font-bold text-indigo-500">1.</span>
+                        <span>Type <code class="font-mono text-slate-700 dark:text-slate-300">A</code>, <code class="font-mono text-slate-700 dark:text-slate-300">A'</code>, <code class="font-mono text-emerald-600">1</code> (Vdd), or <code class="font-mono text-slate-600">0</code> (GND) in pin boxes.</span>
+                    </div>
+                    <div class="flex items-start gap-1.5">
+                        <span class="font-bold text-indigo-500">2.</span>
+                        <span>Click or drag between an <span class="font-semibold text-emerald-600 dark:text-emerald-400">OUT ●</span> dot and an <span class="font-semibold text-blue-600 dark:text-blue-400">● IN / SEL</span> dot to wire MUXes.</span>
+                    </div>
+                    <div class="flex items-start gap-1.5">
+                        <span class="font-bold text-indigo-500">3.</span>
+                        <span>Click any wire to delete it (or press <kbd class="font-mono px-1 rounded bg-slate-200 dark:bg-slate-700">Esc</kbd> to cancel wiring).</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- SVG LAYER FOR CONNECTIONS (WIRES) -->
+        <svg id="wireSvgLayer" class="absolute inset-0 w-full h-full pointer-events-none z-10">
+            <defs>
+                <!-- Arrow / Glow markers if needed -->
+                <filter id="wireShadow" x="-10%" y="-10%" width="120%" height="120%">
+                    <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.15"/>
+                </filter>
+            </defs>
+            <g id="wiresContainer" class="pointer-events-auto"></g>
+            <!-- Temporary Wire being dragged -->
+            <path id="tempWirePath" d="" fill="none" stroke="#6366f1" stroke-width="3" stroke-dasharray="6 4" stroke-linecap="round" class="hidden pointer-events-none"/>
+        </svg>
+
+        <!-- HTML LAYER FOR MULTIPLEXER CARDS -->
+        <div id="nodesContainer" class="absolute inset-0 w-full h-full z-15 pointer-events-none">
+            <!-- MUX nodes dynamically injected here -->
+        </div>
+
+        <!-- EMPTY STATE HINT (Shown when 0 MUXes on canvas) -->
+        <div id="emptyStateHint" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <div class="text-center p-6 rounded-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xs border border-dashed border-slate-300 dark:border-slate-700 max-w-sm">
+                <div class="text-sm font-bold text-slate-700 dark:text-slate-200">Sandbox is Empty</div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Drag the <span class="font-semibold text-indigo-600 dark:text-indigo-400">2:1 Multiplexer</span> icon from the top-left panel onto the grid to start building.</p>
+            </div>
+        </div>
+
+        <!-- COLLAPSIBLE TRUTH TABLE DRAWER (Bottom-Right) -->
+        <div id="truthTableDrawer" class="hidden absolute bottom-4 right-4 z-25 w-[calc(100%-2rem)] sm:w-[440px] max-h-[55vh] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Live Truth Table</span>
+                    <span id="ttMetaBadge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-600 dark:text-slate-300">3 Vars</span>
+                </div>
+                <button id="closeTruthTableBtn" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="overflow-auto flex-1">
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead id="ttHead" class="bg-slate-100/80 dark:bg-slate-800/90 sticky top-0 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"></thead>
+                    <tbody id="ttBody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="toastMsg">Notification</span>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 2-to-1 Multiplexer Open Sandbox Engine
+         * Supports drag-and-drop creation of multiple MUX nodes, interactive wire routing
+         * between outputs and inputs/selectors, inline variable/GND/Vdd text assignment,
+         * recursive symbolic Boolean expression expansion, Quine-McCluskey / truth-table
+         * simplification, and live truth table verification.
+         */
+
+        // --- Application State ---
+        const state = {
+            nodes: [],          // { id, x, y, i0Text, i1Text, sText, outText }
+            wires: [],          // { id, fromNodeId, toNodeId, toPin: 'I0' | 'I1' | 'S' }
+            nextNodeNum: 1,
+            selectedOutputNodeId: null, // Which MUX output is currently displayed at the top
+            draggingNode: null, // { id, offsetX, offsetY }
+            wiringFrom: null,   // { nodeId, portType: 'out'|'in', pin: 'OUT'|'I0'|'I1'|'S', startX, startY, mode: 'drag'|'click' }
+            truthTableOpen: false
+        };
+
+        // --- DOM Cache ---
+        const dom = {
+            sandboxWrapper: document.getElementById('sandboxWrapper'),
+            paletteMuxItem: document.getElementById('paletteMuxItem'),
+            wireSvgLayer: document.getElementById('wireSvgLayer'),
+            wiresContainer: document.getElementById('wiresContainer'),
+            tempWirePath: document.getElementById('tempWirePath'),
+            nodesContainer: document.getElementById('nodesContainer'),
+            emptyStateHint: document.getElementById('emptyStateHint'),
+            topBooleanExpr: document.getElementById('topBooleanExpr'),
+            simplificationBadge: document.getElementById('simplificationBadge'),
+            copyExprBtn: document.getElementById('copyExprBtn'),
+            presetSelect: document.getElementById('presetSelect'),
+            clearCanvasBtn: document.getElementById('clearCanvasBtn'),
+            themeToggle: document.getElementById('themeToggle'),
+            toggleTruthTableBtn: document.getElementById('toggleTruthTableBtn'),
+            truthTableDrawer: document.getElementById('truthTableDrawer'),
+            closeTruthTableBtn: document.getElementById('closeTruthTableBtn'),
+            ttHead: document.getElementById('ttHead'),
+            ttBody: document.getElementById('ttBody'),
+            ttMetaBadge: document.getElementById('ttMetaBadge'),
+            toast: document.getElementById('toast'),
+            toastMsg: document.getElementById('toastMsg')
+        };
+
+        // --- Helper: Show Toast ---
+        let toastTimer;
+        function showToast(msg) {
+            dom.toastMsg.textContent = msg;
+            dom.toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                dom.toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2200);
+        }
+
+        // --- Helper: Parse Pin Text Input ---
+        // Supports: '0', 'GND', 'LOW' -> constant 0
+        //           '1', 'VDD', 'VCC', 'HIGH' -> constant 1
+        //           "A'", "!A", "~A" -> inverted variable A
+        //           "A", "I0", "sel" -> positive variable
+        function parsePinToken(rawText) {
+            const clean = (rawText || '').trim();
+            if (!clean) return { kind: 'CONST', val: 0, label: '0' };
+
+            const upper = clean.toUpperCase();
+            if (upper === '0' || upper === 'GND' || upper === 'LOW') {
+                return { kind: 'CONST', val: 0, label: '0' };
+            }
+            if (upper === '1' || upper === 'VDD' || upper === 'VCC' || upper === 'HIGH') {
+                return { kind: 'CONST', val: 1, label: '1' };
+            }
+
+            // Check inversion syntax: !A, ~A, or A'
+            let inverted = false;
+            let varName = clean;
+            if (varName.startsWith('!') || varName.startsWith('~')) {
+                inverted = true;
+                varName = varName.slice(1).trim();
+            }
+            if (varName.endsWith("'")) {
+                inverted = !inverted;
+                varName = varName.slice(0, -1).trim();
+            }
+
+            // Sanitize variable name
+            varName = varName.replace(/[^a-zA-Z0-9_]/g, '');
+            if (!varName) return { kind: 'CONST', val: 0, label: '0' };
+
+            return {
+                kind: 'VAR',
+                varName,
+                inverted,
+                label: inverted ? `${varName}'` : varName
+            };
+        }
+
+        // --- Node Management ---
+        function addMuxNode(x, y, config = {}) {
+            const id = `mux_${state.nextNodeNum++}`;
+            const node = {
+                id,
+                x: Math.max(16, Math.min(x, dom.sandboxWrapper.clientWidth - 290)),
+                y: Math.max(16, Math.min(y, dom.sandboxWrapper.clientHeight - 230)),
+                i0Text: config.i0Text !== undefined ? config.i0Text : 'I0',
+                i1Text: config.i1Text !== undefined ? config.i1Text : 'I1',
+                sText:  config.sText  !== undefined ? config.sText  : 'S',
+                outText: config.outText !== undefined ? config.outText : (state.nodes.length === 0 ? 'Y' : `M${state.nextNodeNum - 1}`)
+            };
+            state.nodes.push(node);
+            state.selectedOutputNodeId = id;
+            renderAll();
+            return node;
+        }
+
+        function removeMuxNode(nodeId) {
+            state.nodes = state.nodes.filter(n => n.id !== nodeId);
+            state.wires = state.wires.filter(w => w.fromNodeId !== nodeId && w.toNodeId !== nodeId);
+            if (state.selectedOutputNodeId === nodeId) {
+                state.selectedOutputNodeId = state.nodes.length > 0 ? state.nodes[state.nodes.length - 1].id : null;
+            }
+            dom.presetSelect.value = 'custom';
+            renderAll();
+        }
+
+        // --- Wire Management ---
+        function getIncomingWire(toNodeId, toPin) {
+            return state.wires.find(w => w.toNodeId === toNodeId && w.toPin === toPin);
+        }
+
+        function createsCycle(fromNodeId, toNodeId) {
+            if (fromNodeId === toNodeId) return true;
+            // DFS from toNodeId forward through outgoing wires to see if we reach fromNodeId
+            const visited = new Set();
+            const stack = [toNodeId];
+            while (stack.length > 0) {
+                const curr = stack.pop();
+                if (curr === fromNodeId) return true;
+                if (!visited.has(curr)) {
+                    visited.add(curr);
+                    state.wires.forEach(w => {
+                        if (w.fromNodeId === curr) stack.push(w.toNodeId);
+                    });
+                }
+            }
+            return false;
+        }
+
+        function connectWire(fromNodeId, toNodeId, toPin) {
+            if (createsCycle(fromNodeId, toNodeId)) {
+                showToast('Feedback loops (cycles) are not allowed');
+                return;
+            }
+            // Replace any existing wire connected to this exact input/selector pin
+            state.wires = state.wires.filter(w => !(w.toNodeId === toNodeId && w.toPin === toPin));
+            state.wires.push({
+                id: `wire_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                fromNodeId,
+                toNodeId,
+                toPin
+            });
+            // Automatically focus output expression on the downstream MUX
+            state.selectedOutputNodeId = toNodeId;
+            dom.presetSelect.value = 'custom';
+            renderAll();
+        }
+
+        function removeWire(wireId) {
+            state.wires = state.wires.filter(w => w.id !== wireId);
+            dom.presetSelect.value = 'custom';
+            renderAll();
+        }
+
+        // --- Render MUX Cards in DOM ---
+        function renderNodes() {
+            dom.nodesContainer.innerHTML = '';
+            dom.emptyStateHint.classList.toggle('hidden', state.nodes.length > 0);
+
+            state.nodes.forEach(node => {
+                const isSelectedOut = node.id === state.selectedOutputNodeId;
+                const wireI0 = getIncomingWire(node.id, 'I0');
+                const wireI1 = getIncomingWire(node.id, 'I1');
+                const wireS  = getIncomingWire(node.id, 'S');
+
+                const srcNodeI0 = wireI0 ? state.nodes.find(n => n.id === wireI0.fromNodeId) : null;
+                const srcNodeI1 = wireI1 ? state.nodes.find(n => n.id === wireI1.fromNodeId) : null;
+                const srcNodeS  = wireS  ? state.nodes.find(n => n.id === wireS.fromNodeId)  : null;
+
+                const card = document.createElement('div');
+                card.id = `node-card-${node.id}`;
+                card.style.left = `${node.x}px`;
+                card.style.top = `${node.y}px`;
+                card.className = `pointer-events-auto absolute w-[275px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-2 transition-shadow shadow-md ${
+                    isSelectedOut
+                        ? 'border-indigo-500 shadow-indigo-500/15 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                }`;
+
+                card.innerHTML = `
+                    <!-- Card Drag Header -->
+                    <div class="node-drag-handle cursor-grab active:cursor-grabbing px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-800/70 rounded-t-xl no-select">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full ${isSelectedOut ? 'bg-indigo-500 animate-pulse' : 'bg-slate-400'}"></span>
+                            <span class="text-[11px] font-bold font-mono text-slate-600 dark:text-slate-300">2:1 MUX</span>
+                            ${isSelectedOut ? '<span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300">Active Out</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button type="button" class="select-out-btn text-[10px] font-semibold px-1.5 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 transition-colors" title="Show this MUX's Boolean expression at top">
+                                Inspect
+                            </button>
+                            <button type="button" class="delete-node-btn p-0.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/50 text-slate-400 hover:text-rose-600 transition-colors" title="Remove Multiplexer">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MUX Schematic & Pin Textboxes Body -->
+                    <div class="p-3 relative">
+                        <div class="flex items-center justify-between gap-1.5">
+                            <!-- LEFT SIDE: I0 & I1 Inputs with Text Boxes -->
+                            <div class="flex flex-col justify-between gap-4 z-10">
+                                <!-- Pin I0 -->
+                                <div class="flex items-center gap-1.5">
+                                    <div data-port-type="in" data-node-id="${node.id}" data-pin="I0"
+                                         title="Input I₀ Port (Drop wire here)"
+                                         class="port-dot w-3.5 h-3.5 -ml-[19px] rounded-full border-2 border-white dark:border-slate-900 cursor-crosshair shrink-0 ${
+                                             wireI0 ? 'bg-indigo-600' : 'bg-blue-500'
+                                         }"></div>
+                                    <span class="font-mono text-[11px] font-bold text-slate-500 w-4">I₀</span>
+                                    ${wireI0
+                                        ? `<div class="w-16 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 font-mono text-[11px] font-bold text-indigo-700 dark:text-indigo-300 truncate" title="Wired from ${srcNodeI0?.outText || 'MUX'}">→ ${srcNodeI0?.outText || 'MUX'}</div>`
+                                        : `<input type="text" data-pin="I0" value="${node.i0Text}" placeholder="var/0/1"
+                                                  class="pin-text-input w-16 font-mono text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center">`
+                                    }
+                                </div>
+
+                                <!-- Pin I1 -->
+                                <div class="flex items-center gap-1.5">
+                                    <div data-port-type="in" data-node-id="${node.id}" data-pin="I1"
+                                         title="Input I₁ Port (Drop wire here)"
+                                         class="port-dot w-3.5 h-3.5 -ml-[19px] rounded-full border-2 border-white dark:border-slate-900 cursor-crosshair shrink-0 ${
+                                             wireI1 ? 'bg-indigo-600' : 'bg-blue-500'
+                                         }"></div>
+                                    <span class="font-mono text-[11px] font-bold text-slate-500 w-4">I₁</span>
+                                    ${wireI1
+                                        ? `<div class="w-16 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-700 font-mono text-[11px] font-bold text-indigo-700 dark:text-indigo-300 truncate" title="Wired from ${srcNodeI1?.outText || 'MUX'}">→ ${srcNodeI1?.outText || 'MUX'}</div>`
+                                        : `<input type="text" data-pin="I1" value="${node.i1Text}" placeholder="var/0/1"
+                                                  class="pin-text-input w-16 font-mono text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center">`
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- CENTER: Trapezoid MUX Graphic -->
+                            <div class="flex flex-col items-center justify-center shrink-0">
+                                <svg class="w-14 h-20 text-slate-700 dark:text-slate-200" viewBox="0 0 60 84" fill="none">
+                                    <polygon points="8,4 52,18 52,66 8,80" class="fill-indigo-50/70 dark:fill-indigo-950/40 stroke-slate-700 dark:stroke-slate-300" stroke-width="2.5" stroke-linejoin="round"/>
+                                    <text x="14" y="27" font-size="10" font-weight="bold" fill="currentColor" font-family="monospace">0</text>
+                                    <text x="14" y="63" font-size="10" font-weight="bold" fill="currentColor" font-family="monospace">1</text>
+                                    <text x="31" y="45" text-anchor="middle" font-size="9" font-weight="bold" class="fill-indigo-600 dark:fill-indigo-400" font-family="sans-serif">MUX</text>
+                                </svg>
+                            </div>
+
+                            <!-- RIGHT SIDE: Output Variable Box & Output Port -->
+                            <div class="flex items-center gap-1.5 z-10">
+                                <div class="flex flex-col items-end">
+                                    <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-0.5">OUT</span>
+                                    <input type="text" data-pin="OUT" value="${node.outText}" placeholder="Y"
+                                           title="Output label name"
+                                           class="pin-text-input w-14 font-mono text-xs font-bold px-1.5 py-1 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-center text-emerald-800 dark:text-emerald-300">
+                                </div>
+                                <div data-port-type="out" data-node-id="${node.id}" data-pin="OUT"
+                                     title="Drag from here to connect output to another MUX"
+                                     class="port-dot w-4 h-4 -mr-[21px] rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 cursor-crosshair shrink-0 shadow-xs"></div>
+                            </div>
+                        </div>
+
+                        <!-- BOTTOM: Selector (S) Input Row -->
+                        <div class="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-1.5">
+                            <div data-port-type="in" data-node-id="${node.id}" data-pin="S"
+                                 title="Selector S Port (Drop wire here)"
+                                 class="port-dot w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 cursor-crosshair shrink-0 ${
+                                     wireS ? 'bg-indigo-600' : 'bg-amber-500'
+                                 }"></div>
+                            <span class="font-mono text-[11px] font-bold text-amber-600 dark:text-amber-400">SEL (S)</span>
+                            ${wireS
+                                ? `<div class="w-16 px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 font-mono text-[11px] font-bold text-amber-700 dark:text-amber-300 truncate">→ ${srcNodeS?.outText || 'MUX'}</div>`
+                                : `<input type="text" data-pin="S" value="${node.sText}" placeholder="S/0/1"
+                                          class="pin-text-input w-16 font-mono text-xs font-semibold px-2 py-0.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300/80 dark:border-amber-700/70 focus:outline-none focus:ring-2 focus:ring-amber-500 text-center">`
+                            }
+                        </div>
+                    </div>
+                `;
+
+                // Attach Drag-to-Move Listeners on Header
+                const dragHandle = card.querySelector('.node-drag-handle');
+                dragHandle.addEventListener('mousedown', (e) => {
+                    if (e.target.closest('button')) return;
+                    state.selectedOutputNodeId = node.id;
+                    const rect = card.getBoundingClientRect();
+                    state.draggingNode = {
+                        id: node.id,
+                        offsetX: e.clientX - rect.left,
+                        offsetY: e.clientY - rect.top
+                    };
+                    renderAll();
+                });
+
+                // Inspect button
+                card.querySelector('.select-out-btn').addEventListener('click', () => {
+                    state.selectedOutputNodeId = node.id;
+                    renderAll();
+                });
+
+                // Delete Node button
+                card.querySelector('.delete-node-btn').addEventListener('click', () => {
+                    removeMuxNode(node.id);
+                });
+
+                // Pin Text Inputs
+                card.querySelectorAll('.pin-text-input').forEach(inp => {
+                    inp.addEventListener('input', (e) => {
+                        const pin = e.target.dataset.pin;
+                        if (pin === 'I0') node.i0Text = e.target.value;
+                        else if (pin === 'I1') node.i1Text = e.target.value;
+                        else if (pin === 'S') node.sText = e.target.value;
+                        else if (pin === 'OUT') node.outText = e.target.value;
+
+                        state.selectedOutputNodeId = node.id;
+                        dom.presetSelect.value = 'custom';
+                        // Update wires & expression without rebuilding DOM inputs so typing stays smooth
+                        renderWires();
+                        updateBooleanAndTruthTable();
+                    });
+                });
+
+                // Helper to get sandbox-relative center coordinates of any port element
+                const getPortStartCoords = (portEl) => {
+                    const sandboxRect = dom.sandboxWrapper.getBoundingClientRect();
+                    const portRect = portEl.getBoundingClientRect();
+                    return {
+                        x: portRect.left + portRect.width / 2 - sandboxRect.left,
+                        y: portRect.top + portRect.height / 2 - sandboxRect.top
+                    };
+                };
+
+                // Helper to start or complete click-to-connect wiring on any port dot
+                const handlePortInteraction = (portEl, portType, pin, isDragStart) => {
+                    // If already in click-to-connect mode, clicking a second port completes or cancels the wire
+                    if (state.wiringFrom && state.wiringFrom.mode === 'click') {
+                        const first = state.wiringFrom;
+                        // Clicking the exact same port toggles it off
+                        if (first.nodeId === node.id && first.portType === portType && first.pin === pin) {
+                            cancelActiveWiring();
+                            return;
+                        }
+                        // Valid connection: one 'out' port and one 'in' port
+                        if (first.portType === 'out' && portType === 'in') {
+                            connectWire(first.nodeId, node.id, pin);
+                            cancelActiveWiring();
+                            return;
+                        }
+                        if (first.portType === 'in' && portType === 'out') {
+                            connectWire(node.id, first.nodeId, first.pin);
+                            cancelActiveWiring();
+                            return;
+                        }
+                        // Clicking another port of the same direction switches the active start port
+                        cancelActiveWiring();
+                    }
+
+                    const { x, y } = getPortStartCoords(portEl);
+                    state.wiringFrom = {
+                        nodeId: node.id,
+                        portType,
+                        pin,
+                        startX: x,
+                        startY: y,
+                        mode: isDragStart ? 'drag' : 'click',
+                        moved: false
+                    };
+                    portEl.classList.add('port-selected');
+                    dom.tempWirePath.classList.remove('hidden');
+                    dom.tempWirePath.setAttribute('d', `M ${x} ${y} L ${x} ${y}`);
+                };
+
+                // Output Port: Supports both Click-to-Connect and Drag-to-Connect
+                const outPort = card.querySelector('[data-port-type="out"]');
+                outPort.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    if (state.wiringFrom && state.wiringFrom.mode === 'click') {
+                        handlePortInteraction(outPort, 'out', 'OUT', false);
+                        return;
+                    }
+                    handlePortInteraction(outPort, 'out', 'OUT', true);
+                });
+
+                outPort.addEventListener('mouseup', (e) => {
+                    if (state.wiringFrom && state.wiringFrom.mode === 'drag') {
+                        e.stopPropagation();
+                        // If user dragged from an input port and released on this output port
+                        if (state.wiringFrom.portType === 'in') {
+                            connectWire(node.id, state.wiringFrom.nodeId, state.wiringFrom.pin);
+                            cancelActiveWiring();
+                        } else if (!state.wiringFrom.moved && state.wiringFrom.nodeId === node.id) {
+                            // User clicked without dragging -> switch to persistent click-to-connect mode
+                            state.wiringFrom.mode = 'click';
+                            showToast('Click any blue/amber input dot to connect');
+                        }
+                    }
+                });
+
+                // Input & Selector Ports: Supports both Click-to-Connect and Drag-to-Connect
+                card.querySelectorAll('[data-port-type="in"]').forEach(inPort => {
+                    const toPin = inPort.dataset.pin;
+
+                    inPort.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        if (state.wiringFrom && state.wiringFrom.mode === 'click') {
+                            handlePortInteraction(inPort, 'in', toPin, false);
+                            return;
+                        }
+                        handlePortInteraction(inPort, 'in', toPin, true);
+                    });
+
+                    inPort.addEventListener('mouseup', (e) => {
+                        if (state.wiringFrom && state.wiringFrom.mode === 'drag') {
+                            e.stopPropagation();
+                            // If user dragged from an output port and released on this input port
+                            if (state.wiringFrom.portType === 'out') {
+                                connectWire(state.wiringFrom.nodeId, node.id, toPin);
+                                cancelActiveWiring();
+                            } else if (!state.wiringFrom.moved && state.wiringFrom.nodeId === node.id && state.wiringFrom.pin === toPin) {
+                                // User clicked without dragging -> switch to persistent click-to-connect mode
+                                state.wiringFrom.mode = 'click';
+                                showToast('Click any green OUT dot to connect');
+                            }
+                        }
+                    });
+                });
+
+                dom.nodesContainer.appendChild(card);
+            });
+        }
+
+        // Helper to clear active wire drawing state & port highlights
+        function cancelActiveWiring() {
+            state.wiringFrom = null;
+            dom.tempWirePath.classList.add('hidden');
+            document.querySelectorAll('.port-selected').forEach(el => el.classList.remove('port-selected'));
+        }
+
+        // --- Render SVG Wires Connecting Ports ---
+        function getPortCenterCoords(nodeId, pin) {
+            const card = document.getElementById(`node-card-${nodeId}`);
+            if (!card) return null;
+            const selector = pin === 'OUT'
+                ? `[data-port-type="out"][data-node-id="${nodeId}"]`
+                : `[data-port-type="in"][data-node-id="${nodeId}"][data-pin="${pin}"]`;
+            const portEl = card.querySelector(selector);
+            if (!portEl) return null;
+
+            const sandboxRect = dom.sandboxWrapper.getBoundingClientRect();
+            const portRect = portEl.getBoundingClientRect();
+            return {
+                x: portRect.left + portRect.width / 2 - sandboxRect.left,
+                y: portRect.top + portRect.height / 2 - sandboxRect.top
+            };
+        }
+
+        function computeBezierPath(x1, y1, x2, y2, toPin) {
+            const dx = Math.max(45, Math.abs(x2 - x1) * 0.5);
+            if (toPin === 'S') {
+                // Curve smoothly into the bottom selector port
+                return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - 40} ${y2 + 35}, ${x2} ${y2}`;
+            }
+            return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+        }
+
+        function renderWires() {
+            dom.wiresContainer.innerHTML = '';
+
+            state.wires.forEach(wire => {
+                const start = getPortCenterCoords(wire.fromNodeId, 'OUT');
+                const end = getPortCenterCoords(wire.toNodeId, wire.toPin);
+                if (!start || !end) return;
+
+                const d = computeBezierPath(start.x, start.y, end.x, end.y, wire.toPin);
+                const strokeColor = wire.toPin === 'S' ? '#f59e0b' : '#6366f1';
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', d);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', strokeColor);
+                path.setAttribute('stroke-width', '3');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('filter', 'url(#wireShadow)');
+                path.classList.add('wire-path');
+
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = 'Click to remove connection';
+                path.appendChild(title);
+
+                path.addEventListener('click', () => {
+                    removeWire(wire.id);
+                    showToast('Connection removed');
+                });
+
+                dom.wiresContainer.appendChild(path);
+            });
+        }
+
+        // --- Recursive Circuit Evaluation & Symbolic Boolean Algebra ---
+        function getPinBooleanAst(nodeId, pinKey, visited = new Set()) {
+            const node = state.nodes.find(n => n.id === nodeId);
+            if (!node) return { kind: 'CONST', val: 0 };
+
+            const incoming = getIncomingWire(nodeId, pinKey);
+            if (incoming && !visited.has(incoming.fromNodeId)) {
+                const nextVisited = new Set(visited);
+                nextVisited.add(nodeId);
+                return getNodeOutputAst(incoming.fromNodeId, nextVisited);
+            }
+
+            const raw = pinKey === 'I0' ? node.i0Text : (pinKey === 'I1' ? node.i1Text : node.sText);
+            return parsePinToken(raw);
+        }
+
+        function getNodeOutputAst(nodeId, visited = new Set()) {
+            const sAst  = getPinBooleanAst(nodeId, 'S', visited);
+            const i0Ast = getPinBooleanAst(nodeId, 'I0', visited);
+            const i1Ast = getPinBooleanAst(nodeId, 'I1', visited);
+
+            return {
+                kind: 'MUX',
+                s: sAst,
+                i0: i0Ast,
+                i1: i1Ast
+            };
+        }
+
+        // Evaluate an AST node under a variable assignment environment { A: 0, B: 1, ... }
+        function evalAst(ast, env) {
+            if (ast.kind === 'CONST') return ast.val;
+            if (ast.kind === 'VAR') {
+                const bit = env[ast.varName] ? 1 : 0;
+                return ast.inverted ? (1 - bit) : bit;
+            }
+            if (ast.kind === 'MUX') {
+                const sBit = evalAst(ast.s, env);
+                return sBit === 0 ? evalAst(ast.i0, env) : evalAst(ast.i1, env);
+            }
+            return 0;
+        }
+
+        // Collect all unique variable names referenced in an AST
+        function collectAstVariables(ast, set = new Set()) {
+            if (ast.kind === 'VAR') {
+                set.add(ast.varName);
+            } else if (ast.kind === 'MUX') {
+                collectAstVariables(ast.s, set);
+                collectAstVariables(ast.i0, set);
+                collectAstVariables(ast.i1, set);
+            }
+            return set;
+        }
+
+        // Direct structural algebraic string builder (for large variable counts or nested MUXes)
+        function astToAlgebraString(ast) {
+            if (ast.kind === 'CONST') return String(ast.val);
+            if (ast.kind === 'VAR') return ast.inverted ? `${ast.varName}'` : ast.varName;
+
+            if (ast.kind === 'MUX') {
+                const sStr  = astToAlgebraString(ast.s);
+                const i0Str = astToAlgebraString(ast.i0);
+                const i1Str = astToAlgebraString(ast.i1);
+
+                // Constant S shortcuts
+                if (sStr === '0') return i0Str;
+                if (sStr === '1') return i1Str;
+
+                const sNeg = ast.s.kind === 'VAR'
+                    ? (ast.s.inverted ? ast.s.varName : `${ast.s.varName}'`)
+                    : `(${sStr})'`;
+                const sPos = ast.s.kind === 'MUX' ? `(${sStr})` : sStr;
+
+                const wrap = (expr, rawAst) => rawAst.kind === 'MUX' && expr.includes('+') ? `(${expr})` : expr;
+
+                const terms = [];
+                if (i0Str !== '0') {
+                    terms.push(i0Str === '1' ? sNeg : `${sNeg}·${wrap(i0Str, ast.i0)}`);
+                }
+                if (i1Str !== '0') {
+                    terms.push(i1Str === '1' ? sPos : `${sPos}·${wrap(i1Str, ast.i1)}`);
+                }
+
+                if (terms.length === 0) return '0';
+                if (terms.length === 2 && terms[0] === terms[1]) return terms[0];
+                return terms.join(' + ');
+            }
+            return '0';
+        }
+
+        // Quine-McCluskey Minimal Sum-of-Products (SOP) Simplifier for up to 6 variables
+        function simplifyBooleanFunction(vars, minterms) {
+            const numVars = vars.length;
+            const totalRows = 1 << numVars;
+
+            if (minterms.length === 0) return { expr: '0', label: 'Constant 0' };
+            if (minterms.length === totalRows) return { expr: '1', label: 'Constant 1' };
+
+            // Special clean recognition for 2-variable XOR / XNOR
+            if (numVars === 2 && minterms.length === 2) {
+                if (minterms[0] === 1 && minterms[1] === 2) {
+                    return { expr: `${vars[0]} ⊕ ${vars[1]}  (${vars[0]}'·${vars[1]} + ${vars[0]}·${vars[1]}')`, label: 'XOR Logic' };
+                }
+                if (minterms[0] === 0 && minterms[1] === 3) {
+                    return { expr: `(${vars[0]} ⊕ ${vars[1]})'  (${vars[0]}'·${vars[1]}' + ${vars[0]}·${vars[1]})`, label: 'XNOR Logic' };
+                }
+            }
+
+            // Quine-McCluskey Prime Implicant Generation
+            let groups = {};
+            minterms.forEach(m => {
+                const bin = m.toString(2).padStart(numVars, '0');
+                const ones = bin.split('').filter(b => b === '1').length;
+                if (!groups[ones]) groups[ones] = [];
+                groups[ones].push({ pattern: bin, minterms: [m], used: false });
+            });
+
+            const primeImplicants = [];
+            while (Object.keys(groups).length > 0) {
+                const nextGroups = {};
+                const seenPatterns = new Set();
+                const keys = Object.keys(groups).map(Number).sort((a, b) => a - b);
+
+                for (let i = 0; i < keys.length - 1; i++) {
+                    const g1 = groups[keys[i]];
+                    const g2 = groups[keys[i + 1]];
+                    if (keys[i + 1] !== keys[i] + 1) continue;
+
+                    for (const item1 of g1) {
+                        for (const item2 of g2) {
+                            let diffCount = 0;
+                            let diffIdx = -1;
+                            for (let c = 0; c < numVars; c++) {
+                                if (item1.pattern[c] !== item2.pattern[c]) {
+                                    diffCount++;
+                                    diffIdx = c;
+                                }
+                            }
+                            if (diffCount === 1) {
+                                item1.used = true;
+                                item2.used = true;
+                                const newPat = item1.pattern.slice(0, diffIdx) + '-' + item1.pattern.slice(diffIdx + 1);
+                                if (!seenPatterns.has(newPat)) {
+                                    seenPatterns.add(newPat);
+                                    const ones = newPat.split('').filter(b => b === '1').length;
+                                    if (!nextGroups[ones]) nextGroups[ones] = [];
+                                    nextGroups[ones].push({
+                                        pattern: newPat,
+                                        minterms: [...new Set([...item1.minterms, ...item2.minterms])],
+                                        used: false
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Collect unused implicants as prime implicants
+                for (const k of keys) {
+                    for (const item of groups[k]) {
+                        if (!item.used) primeImplicants.push(item);
+                    }
+                }
+                groups = nextGroups;
+            }
+
+            // Greedy Essential Prime Implicant Cover
+            const uncovered = new Set(minterms);
+            const selectedPIs = [];
+
+            // 1. Pick essential prime implicants first
+            for (const m of minterms) {
+                const covering = primeImplicants.filter(pi => pi.minterms.includes(m));
+                if (covering.length === 1 && !selectedPIs.includes(covering[0])) {
+                    selectedPIs.push(covering[0]);
+                    covering[0].minterms.forEach(cm => uncovered.delete(cm));
+                }
+            }
+
+            // 2. Cover remaining minterms greedily
+            while (uncovered.size > 0) {
+                let bestPI = null;
+                let bestCount = -1;
+                for (const pi of primeImplicants) {
+                    if (selectedPIs.includes(pi)) continue;
+                    const count = pi.minterms.filter(m => uncovered.has(m)).length;
+                    if (count > bestCount) {
+                        bestCount = count;
+                        bestPI = pi;
+                    }
+                }
+                if (!bestPI) break;
+                selectedPIs.push(bestPI);
+                bestPI.minterms.forEach(cm => uncovered.delete(cm));
+            }
+
+            // Format selected prime implicants into product terms
+            const productTerms = selectedPIs.map(pi => {
+                const literals = [];
+                for (let i = 0; i < numVars; i++) {
+                    if (pi.pattern[i] === '1') literals.push(vars[i]);
+                    else if (pi.pattern[i] === '0') literals.push(`${vars[i]}'`);
+                }
+                return literals.join('·');
+            });
+
+            return {
+                expr: productTerms.join(' + '),
+                label: 'Minimal SOP'
+            };
+        }
+
+        // --- Update Top Boolean Expression & Truth Table ---
+        function updateBooleanAndTruthTable() {
+            if (state.nodes.length === 0) {
+                dom.topBooleanExpr.textContent = 'Add a 2:1 Multiplexer to begin';
+                dom.simplificationBadge.textContent = 'Empty';
+                dom.ttHead.innerHTML = '';
+                dom.ttBody.innerHTML = '';
+                dom.ttMetaBadge.textContent = '0 Vars';
+                return;
+            }
+
+            // Determine target output MUX
+            let targetNode = state.nodes.find(n => n.id === state.selectedOutputNodeId);
+            if (!targetNode) {
+                targetNode = state.nodes[state.nodes.length - 1];
+                state.selectedOutputNodeId = targetNode.id;
+            }
+
+            const outLabel = (targetNode.outText || 'Y').trim() || 'Y';
+            const ast = getNodeOutputAst(targetNode.id);
+            const vars = Array.from(collectAstVariables(ast)).sort();
+
+            if (vars.length <= 6) {
+                const k = vars.length;
+                const numRows = 1 << k;
+                const minterms = [];
+                const rowsData = [];
+
+                for (let r = 0; r < numRows; r++) {
+                    const env = {};
+                    vars.forEach((v, idx) => {
+                        env[v] = (r >> (k - 1 - idx)) & 1;
+                    });
+                    const yVal = evalAst(ast, env);
+                    if (yVal === 1) minterms.push(r);
+                    rowsData.push({ env, yVal });
+                }
+
+                const { expr, label } = simplifyBooleanFunction(vars, minterms);
+                dom.topBooleanExpr.textContent = `${outLabel} = ${expr}`;
+                dom.simplificationBadge.textContent = label;
+
+                // Update Truth Table Drawer
+                dom.ttMetaBadge.textContent = `${k} Var${k === 1 ? '' : 's'} • ${numRows} Rows`;
+                let headHTML = '<tr>';
+                vars.forEach(v => {
+                    headHTML += `<th class="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400">${v}</th>`;
+                });
+                headHTML += `<th class="py-2 px-3 border-l border-slate-200 dark:border-slate-700 font-bold text-emerald-600 dark:text-emerald-400">${outLabel}</th></tr>`;
+                dom.ttHead.innerHTML = headHTML;
+
+                let bodyHTML = '';
+                rowsData.forEach(row => {
+                    bodyHTML += `<tr class="${row.yVal === 1 ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}">`;
+                    vars.forEach(v => {
+                        const bit = row.env[v];
+                        bodyHTML += `<td class="py-1.5 px-3 ${bit === 1 ? 'font-bold text-slate-900 dark:text-white' : 'text-slate-400'}">${bit}</td>`;
+                    });
+                    bodyHTML += `<td class="py-1.5 px-3 border-l border-slate-100 dark:border-slate-800 font-bold ${row.yVal === 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}">${row.yVal}</td></tr>`;
+                });
+                dom.ttBody.innerHTML = bodyHTML;
+            } else {
+                // Fallback for > 6 variables: direct structural expression
+                const expr = astToAlgebraString(ast);
+                dom.topBooleanExpr.textContent = `${outLabel} = ${expr}`;
+                dom.simplificationBadge.textContent = `${vars.length} Vars`;
+                dom.ttMetaBadge.textContent = `${vars.length} Vars (Max 6 for table)`;
+                dom.ttHead.innerHTML = '';
+                dom.ttBody.innerHTML = '<tr><td class="p-4 text-slate-500">Truth table supports up to 6 unique variables.</td></tr>';
+            }
+        }
+
+        // --- Master Render ---
+        function renderAll() {
+            renderNodes();
+            // Wait a frame so DOM port positions are settled before drawing SVG wires
+            requestAnimationFrame(() => {
+                renderWires();
+            });
+            updateBooleanAndTruthTable();
+        }
+
+        // --- Global Mouse Move / Mouse Up Handlers (Dragging Nodes & Drawing Wires) ---
+        window.addEventListener('mousemove', (e) => {
+            if (!state.draggingNode && !state.wiringFrom) return;
+            const sandboxRect = dom.sandboxWrapper.getBoundingClientRect();
+
+            // 1. Dragging a MUX Card
+            if (state.draggingNode) {
+                const node = state.nodes.find(n => n.id === state.draggingNode.id);
+                if (node) {
+                    node.x = Math.max(8, Math.min(e.clientX - sandboxRect.left - state.draggingNode.offsetX, sandboxRect.width - 283));
+                    node.y = Math.max(8, Math.min(e.clientY - sandboxRect.top - state.draggingNode.offsetY, sandboxRect.height - 210));
+                    const card = document.getElementById(`node-card-${node.id}`);
+                    if (card) {
+                        card.style.left = `${node.x}px`;
+                        card.style.top = `${node.y}px`;
+                    }
+                    renderWires();
+                }
+            }
+
+            // 2. Dragging or Moving Cursor with an Active Wire
+            if (state.wiringFrom) {
+                const currX = e.clientX - sandboxRect.left;
+                const currY = e.clientY - sandboxRect.top;
+                if (Math.hypot(currX - state.wiringFrom.startX, currY - state.wiringFrom.startY) > 5) {
+                    state.wiringFrom.moved = true;
+                }
+                const d = state.wiringFrom.portType === 'out'
+                    ? computeBezierPath(state.wiringFrom.startX, state.wiringFrom.startY, currX, currY, 'I0')
+                    : computeBezierPath(currX, currY, state.wiringFrom.startX, state.wiringFrom.startY, state.wiringFrom.pin);
+                dom.tempWirePath.setAttribute('d', d);
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (state.draggingNode) {
+                state.draggingNode = null;
+            }
+            // Only cancel drag-mode wiring on empty canvas release; keep click-mode wiring active until a target port or empty background is clicked
+            if (state.wiringFrom && state.wiringFrom.mode === 'drag') {
+                cancelActiveWiring();
+            }
+        });
+
+        // Clicking empty sandbox background cancels click-to-connect mode
+        dom.sandboxWrapper.addEventListener('mousedown', (e) => {
+            if (state.wiringFrom && state.wiringFrom.mode === 'click' && !e.target.closest('.port-dot')) {
+                cancelActiveWiring();
+            }
+        });
+
+        // Pressing Escape cancels active click-to-connect wiring
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && state.wiringFrom) {
+                cancelActiveWiring();
+                showToast('Connection cancelled');
+            }
+        });
+
+        // --- Drag-and-Drop from Top-Left Palette onto Sandbox ---
+        dom.paletteMuxItem.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', 'NEW_MUX');
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        // Also allow clicking the palette item to spawn a MUX in a nice staggered spot
+        dom.paletteMuxItem.addEventListener('click', () => {
+            const offset = (state.nodes.length % 6) * 32;
+            addMuxNode(270 + offset, 60 + offset);
+            dom.presetSelect.value = 'custom';
+        });
+
+        dom.sandboxWrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        dom.sandboxWrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            if (type === 'NEW_MUX') {
+                const sandboxRect = dom.sandboxWrapper.getBoundingClientRect();
+                const dropX = e.clientX - sandboxRect.left - 135;
+                const dropY = e.clientY - sandboxRect.top - 70;
+                addMuxNode(dropX, dropY);
+                dom.presetSelect.value = 'custom';
+            }
+        });
+
+        // --- Presets Loader ---
+        function loadPreset(key) {
+            state.nodes = [];
+            state.wires = [];
+            state.nextNodeNum = 1;
+
+            if (key === 'single') {
+                addMuxNode(320, 90, { i0Text: 'I0', i1Text: 'I1', sText: 'S', outText: 'Y' });
+            } else if (key === 'xor') {
+                addMuxNode(320, 90, { i0Text: 'A', i1Text: "A'", sText: 'B', outText: 'Y' });
+            } else if (key === 'mux4to1') {
+                const m1 = addMuxNode(250, 35,  { i0Text: 'I0', i1Text: 'I1', sText: 'S0', outText: 'M1' });
+                const m2 = addMuxNode(250, 265, { i0Text: 'I2', i1Text: 'I3', sText: 'S0', outText: 'M2' });
+                const m3 = addMuxNode(600, 150, { i0Text: '',   i1Text: '',   sText: 'S1', outText: 'Y' });
+                state.wires.push({ id: 'w1', fromNodeId: m1.id, toNodeId: m3.id, toPin: 'I0' });
+                state.wires.push({ id: 'w2', fromNodeId: m2.id, toNodeId: m3.id, toPin: 'I1' });
+                state.selectedOutputNodeId = m3.id;
+                renderAll();
+            } else if (key === 'fullAdderCarry') {
+                // Carry Out = Cin ? (A | B) : (A & B)
+                const mAnd = addMuxNode(250, 35,  { i0Text: '0', i1Text: 'A', sText: 'B',   outText: 'AB' });
+                const mOr  = addMuxNode(250, 265, { i0Text: 'A', i1Text: '1', sText: 'B',   outText: 'A+B' });
+                const mOut = addMuxNode(600, 150, { i0Text: '',  i1Text: '',  sText: 'Cin', outText: 'Cout' });
+                state.wires.push({ id: 'w1', fromNodeId: mAnd.id, toNodeId: mOut.id, toPin: 'I0' });
+                state.wires.push({ id: 'w2', fromNodeId: mOr.id,  toNodeId: mOut.id, toPin: 'I1' });
+                state.selectedOutputNodeId = mOut.id;
+                renderAll();
+            }
+        }
+
+        dom.presetSelect.addEventListener('change', (e) => {
+            loadPreset(e.target.value);
+        });
+
+        // --- Clear Canvas ---
+        dom.clearCanvasBtn.addEventListener('click', () => {
+            state.nodes = [];
+            state.wires = [];
+            state.nextNodeNum = 1;
+            state.selectedOutputNodeId = null;
+            dom.presetSelect.value = 'custom';
+            renderAll();
+            showToast('Sandbox cleared');
+        });
+
+        // --- Truth Table Drawer Toggle ---
+        dom.toggleTruthTableBtn.addEventListener('click', () => {
+            state.truthTableOpen = !state.truthTableOpen;
+            dom.truthTableDrawer.classList.toggle('hidden', !state.truthTableOpen);
+        });
+        dom.closeTruthTableBtn.addEventListener('click', () => {
+            state.truthTableOpen = false;
+            dom.truthTableDrawer.classList.add('hidden');
+        });
+
+        // --- Copy Expression Button ---
+        dom.copyExprBtn.addEventListener('click', () => {
+            const textToCopy = dom.topBooleanExpr.textContent;
+            const tempInput = document.createElement('textarea');
+            tempInput.value = textToCopy;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            try {
+                document.execCommand('copy');
+                showToast(`Copied: ${textToCopy}`);
+            } catch (err) {
+                showToast('Unable to copy');
+            }
+            document.body.removeChild(tempInput);
+        });
+
+        // --- Theme Toggle ---
+        function initTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+            }
+        }
+        dom.themeToggle.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // --- Handle Window Resize ---
+        window.addEventListener('resize', () => {
+            renderWires();
+        });
+
+        // --- Initialize Sandbox ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            loadPreset('single');
+        });
+    </script>
+</body>
+</html>
